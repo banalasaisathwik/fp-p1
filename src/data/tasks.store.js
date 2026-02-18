@@ -1,79 +1,50 @@
 
-import { read } from "fs";
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
+import Database from "better-sqlite3";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const db = new Database('src/data/tasks.db');
 
-const filePath = path.join(__dirname, "tasks.json");
+db.exec(
+  `CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT
+  )`
+)
 
 async function getAllTasks() {
-  const data = await readData();
-  return data.tasks;
+  const tasks = db.prepare('SELECT * FROM tasks').all();
+  return tasks;
 }
 
 async function getTaskById(id) {
-  const data = await readData();
-  return data.tasks.find(t => t.id === id);
+  const data = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+  return data;
 }
 
 async function createTask(title, description) {
-  const data = await readData();
-  const tasks = data.tasks;
-  let id_counter = data.id_counter;
-  const new_task = {
-    id: id_counter++,
-    title,
-    description
-  };
-  const updated_tasks = [...tasks, new_task];
-  await writeData({ tasks: updated_tasks, id_counter });
+  db.prepare('INSERT INTO tasks (title, description) VALUES (?, ?)').run(title, description);
+  const new_task = db.prepare('SELECT * FROM tasks WHERE title = ? AND description = ?').get(title, description);
   return new_task;
 }
 
 
 async function deleteTask(id) {
-  const data = await readData();
-  const tasks_arr = data.tasks;
-  const index = tasks_arr.findIndex(t => t.id === id);
-  if (index !== -1) {
-    tasks_arr.splice(index, 1);
-    await writeData({ tasks: tasks_arr, id_counter: data.id_counter });
+  const data = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  if (data.changes > 0) {
     return true;
   }
   return false;
 }
 
 async function updateTask(id, updatedTask) {
-  const data = await readData();
-  const tasks = data.tasks;
-  const task_index = tasks.findIndex(t=>t.id === id);
-  if (task_index !== -1) {
-    const task = tasks[task_index];
-    if (updatedTask.title) {
-      task.title = updatedTask.title;
-    }
-    if (updatedTask.description) {
-      task.description = updatedTask.description;
-    }
-    await writeData({ tasks, id_counter: data.id_counter });
-    return task;
+  const data = db.prepare('UPDATE tasks SET title = ?, description = ? WHERE id = ?').run(updatedTask.title, updatedTask.description, id);
+  if (data.changes > 0) {
+    const updated_task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    return updated_task;
   }
   return null;
 }
 
-
-async function readData() {
-  const file = await fs.readFile(filePath, "utf-8");
-  return JSON.parse(file);
-}
-
-async function writeData(data) {
-  await fs.writeFile(filePath,JSON.stringify(data,null,2))
-  return;
-}
 
 export default  {
   getAllTasks,
